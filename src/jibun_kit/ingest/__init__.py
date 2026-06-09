@@ -1,9 +1,8 @@
 """Ingest source registry.
 
-Maps a CLI source name to the module that exposes ``run(config, args, workspace) -> int``
-and ``add_arguments(parser)``. Populated as sources are ported:
+Maps a CLI source name to the module that exposes
+``run(config, args, workspace) -> int`` and ``add_arguments(parser)``.
 
-- Phase 0: empty (ingest is a stub).
 - Phase 1: claude-code, gmail, line.
 - Phase 2: icloudmail, imessage, twitter, twilog, blog.
 
@@ -12,5 +11,16 @@ and ``add_arguments(parser)``. Populated as sources are ported:
 
 from __future__ import annotations
 
+import importlib
+
 # name -> dotted module path under jibun_kit.ingest
-REGISTRY: dict[str, str] = {}
+REGISTRY: dict[str, str] = {
+    "claude-code": "jibun_kit.ingest.claude_code",
+    "gmail": "jibun_kit.ingest.gmail",
+    "line": "jibun_kit.ingest.line",
+}
+
+
+def load_source(name: str):
+    """Import and return the ingest module registered under ``name``."""
+    return importlib.import_module(REGISTRY[name])

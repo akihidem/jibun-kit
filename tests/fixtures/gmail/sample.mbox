@@ -1,0 +1,18 @@
+From operator@example.com Mon May 11 00:00:00 2026
+From: Me <operator@example.com>
+To: alice@example.com
+Subject: Hello there
+Date: Mon, 11 May 2026 00:00:00 +0900
+Content-Type: text/plain; charset=utf-8
+
+This is my message body.
+Second line of mine.
+
+From alice@example.com Mon May 11 01:00:00 2026
+From: Alice <alice@example.com>
+To: operator@example.com
+Subject: Re Hello
+Date: Mon, 11 May 2026 01:00:00 +0900
+Content-Type: text/plain; charset=utf-8
+
+Alice wrote this and should be excluded.

@@ -1,7 +1,7 @@
 """jibun — single CLI entrypoint.
 
-Subcommands: ``init`` / ``config`` / ``ingest`` / ``build``.
-``ingest`` and ``build`` are stubs in Phase 0; Phase 1+ wires real dispatch.
+Subcommands: ``init`` / ``config`` / ``ingest <source>`` / ``build``.
+``build`` is a stub in Phase 0–2; Phase 3 implements it.
 """
 
 from __future__ import annotations
@@ -17,10 +17,7 @@ from jibun_kit.workspace import Workspace, resolve_workspace
 
 def _add_path_arg(p: argparse.ArgumentParser) -> None:
     p.add_argument(
-        "--path",
-        type=Path,
-        default=None,
-        metavar="DIR",
+        "--path", type=Path, default=None, metavar="DIR",
         help="workspace root (default: $JIBUN_ROOT or upward search from CWD)",
     )
 
@@ -63,19 +60,38 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
-    from jibun_kit.ingest import REGISTRY
+    from jibun_kit.ingest import REGISTRY, load_source
 
-    if not REGISTRY:
-        print("error: no ingest sources are wired yet (planned for Phase 1).", file=sys.stderr)
+    source = getattr(args, "source", None)
+    if not source:
+        print("error: source を指定してください。例: `jibun ingest claude-code`", file=sys.stderr)
+        print("  sources: " + ", ".join(sorted(REGISTRY)), file=sys.stderr)
         return 2
-    # Phase 1+ replaces this with real dispatch driven by REGISTRY.
-    print("error: ingest dispatch not yet implemented.", file=sys.stderr)
-    return 2
+    ws = resolve_workspace(args.path)
+    cfg = JibunConfig.load(ws.config_path)
+    return load_source(source).run(cfg, args, ws)
 
 
 def cmd_build(args: argparse.Namespace) -> int:
     print("error: `jibun build` is not yet implemented (planned for Phase 3).", file=sys.stderr)
     return 2
+
+
+def _build_ingest_subparsers(p_ing: argparse.ArgumentParser) -> None:
+    """REGISTRY を駆動して `jibun ingest <source>` の各 sub-subparser を構築。"""
+    from jibun_kit.ingest import REGISTRY, load_source
+
+    src_sub = p_ing.add_subparsers(dest="source", metavar="<source>")
+    for name in sorted(REGISTRY):
+        mod = load_source(name)
+        sp = src_sub.add_parser(name, help=getattr(mod, "HELP", f"ingest {name}"))
+        # 共通引数（source 別フラグの前に置く）
+        sp.add_argument("--path", type=Path, default=None, metavar="DIR",
+                        help="workspace root (default: $JIBUN_ROOT or upward search)")
+        sp.add_argument("--dry-run", action="store_true", help="report counts, write nothing")
+        sp.add_argument("-v", "--verbose", action="store_true")
+        mod.add_arguments(sp)
+        sp.set_defaults(func=cmd_ingest, source=name)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -98,14 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_path_arg(p_cfg)
     p_cfg.set_defaults(func=cmd_config)
 
-    p_ing = sub.add_parser("ingest", help="ingest a source into the workspace")
-    _add_path_arg(p_ing)
-    p_ing.add_argument("source", nargs="?",
-                       help="source name (claude-code, gmail, line, ...)")
-    p_ing.add_argument("--all", action="store_true",
-                       help="ingest every configured source that has input available")
-    p_ing.add_argument("--dry-run", action="store_true", help="report counts, write nothing")
-    p_ing.add_argument("-v", "--verbose", action="store_true")
+    p_ing = sub.add_parser("ingest", help="ingest a source: `jibun ingest <source> [opts]`")
+    _build_ingest_subparsers(p_ing)
     p_ing.set_defaults(func=cmd_ingest)
 
     p_build = sub.add_parser("build", help="assemble ingested data into jibun.md")

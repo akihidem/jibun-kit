@@ -1,0 +1,5 @@
+{"type":"user","isSidechain":false,"timestamp":"2026-05-11T00:00:00Z","cwd":"/home/x","gitBranch":"main","version":"2.1.0","message":{"role":"user","content":"hello this is me"}}
+{"type":"user","timestamp":"2026-05-11T00:01:00Z","message":{"role":"user","content":"<system-reminder>auto injected reminder</system-reminder>"}}
+{"type":"user","isSidechain":true,"timestamp":"2026-05-11T00:02:00Z","message":{"role":"user","content":"sidechain text excluded"}}
+{"type":"assistant","timestamp":"2026-05-11T00:03:00Z","message":{"role":"assistant","content":"assistant reply excluded"}}
+{"type":"user","timestamp":"2026-05-11T00:04:00Z","message":{"role":"user","content":[{"type":"text","text":"second real message"},{"type":"tool_result","content":"toolout excluded"}]}}
