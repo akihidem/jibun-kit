@@ -1,0 +1,26 @@
+# jibun-kit (the tool) repo .gitignore
+# NOTE: this is the DEV repo. Do not develop a real personal workspace in-tree.
+
+# python build / cache
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+
+# venvs
+.venv/
+venv/
+
+# editor / OS
+.DS_Store
+*.local.md
+
+# guard: never commit a personal workspace that might be created here for testing
+/data/
+/_build/
+/jibun.toml
+/jibun.md

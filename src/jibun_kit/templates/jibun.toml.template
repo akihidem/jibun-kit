@@ -1,0 +1,39 @@
+# jibun.toml — あなたの identity を一度だけ設定するファイル。
+#
+# このファイルは（data/ と違い）git に追跡してよい。handle / email を含むが
+# secret も生データも含めないこと。各 ingest はここから既定値を引く。
+# 個別実行時は CLI フラグで上書きできる（解決順: CLI > このファイル > env > 既定）。
+
+[identity]
+# gmail / icloudmail の送信者一致に使う自分のアドレス（複数可）
+emails = []
+# 任意。複数アドレスを正規表現でまとめたいとき（emails と OR）
+# email_pattern = "^(you|you\\.work)@example\\.com$"
+email_pattern = ""
+
+# LINE トーク履歴上の自分の表示名（完全一致）
+line_name = ""
+
+# iMessage export 上の自分のラベル
+imessage_label = "Me"
+
+# twilog のユーザー名（@ は不要）
+twilog_user = ""
+
+[sources.claude_code]
+# Claude Code の会話ログ root。空なら `jibun ingest claude-code --projects-root <path>` 必須。
+# 例: ~/.claude/projects/<your-encoded-cwd>
+projects_root = ""
+
+[fetch]
+# twilog / blog をクロールする際 User-Agent に埋める連絡先（礼儀）。
+contact = ""
+
+[build]
+# 診断的言及（DSM/ICD レベルの踏み込んだ表現）を出力に含めるか。
+# 既定 false = 理論的言及（語彙としての参照）で止める。
+# true は「被験者が自己検証できる専門家（臨床家など）」前提。一般用途では false 推奨。
+diagnostic_stance = false
+
+# `jibun build --with-claude` で claude -p に渡す effort（モデルは CLI 設定に従う）
+default_effort = "high"

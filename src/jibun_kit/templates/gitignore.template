@@ -1,0 +1,20 @@
+# jibun workspace .gitignore
+#
+# 生データは絶対に commit しない。repo に残すのはメタデータ（sources/*-index.md）と
+# 人手でレビュー・承認した jibun.md のみ。
+
+# raw ingested data（会話全文・メール・ツイート原文など）
+data/
+
+# build staging（context-bundle 等の一時生成物）
+_build/
+
+# 編集途中の下書き・ローカル限定メモ
+*.local.md
+draft-*.md
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
