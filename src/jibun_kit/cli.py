@@ -72,6 +72,46 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return load_source(source).run(cfg, args, ws)
 
 
+def cmd_ingest_all(args: argparse.Namespace) -> int:
+    """config だけで実行できる source をまとめて取り込む。
+
+    export を渡す必要がある source (gmail/icloudmail/imessage/line/twitter/twilog) は
+    入力パスが毎回違うので --all では走らせず、個別実行を促す（黙ってスキップしない）。
+    """
+    from jibun_kit.ingest import blog, claude_code
+
+    ws = resolve_workspace(args.path)
+    cfg = JibunConfig.load(ws.config_path)
+    ran: list[str] = []
+    skipped: list[str] = []
+
+    # claude-code: config に projects_root があれば全 session
+    if cfg.claude_projects_root:
+        cc = argparse.Namespace(projects_root=None, session=None, all=True, since=None,
+                                until=None, dry_run=args.dry_run, verbose=args.verbose)
+        claude_code.run(cfg, cc, ws)
+        ran.append("claude-code")
+    else:
+        skipped.append("claude-code — set [sources.claude_code].projects_root in jibun.toml")
+
+    # blog: workspace の sources/blog.md に URL があれば
+    if blog.parse_blog_urls(ws.sources_root / "blog.md"):
+        bl = argparse.Namespace(blog_md=None, refresh_all=False, contact=None,
+                                dry_run=args.dry_run, verbose=args.verbose)
+        blog.run(cfg, bl, ws)
+        ran.append("blog")
+    else:
+        skipped.append("blog — add URLs to sources/blog.md")
+
+    skipped.append("gmail/icloudmail/imessage/line/twitter/twilog — run individually "
+                   "(each needs its own --mbox/--file/--export-dir/--since etc.)")
+
+    print(f"\ningest all: ran [{', '.join(ran) if ran else 'none'}]")
+    for s in skipped:
+        print(f"  skipped: {s}")
+    return 0
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     print("error: `jibun build` is not yet implemented (planned for Phase 3).", file=sys.stderr)
     return 2
@@ -92,6 +132,15 @@ def _build_ingest_subparsers(p_ing: argparse.ArgumentParser) -> None:
         sp.add_argument("-v", "--verbose", action="store_true")
         mod.add_arguments(sp)
         sp.set_defaults(func=cmd_ingest, source=name)
+
+    # `jibun ingest all`: config から実行できる source をまとめて取り込む
+    sp_all = src_sub.add_parser(
+        "all", help="config から実行できる source をまとめて取り込む (claude-code, blog)")
+    sp_all.add_argument("--path", type=Path, default=None, metavar="DIR",
+                        help="workspace root (default: $JIBUN_ROOT or upward search)")
+    sp_all.add_argument("--dry-run", action="store_true")
+    sp_all.add_argument("-v", "--verbose", action="store_true")
+    sp_all.set_defaults(func=cmd_ingest_all)
 
 
 def build_parser() -> argparse.ArgumentParser:
