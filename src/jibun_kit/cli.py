@@ -113,8 +113,11 @@ def cmd_ingest_all(args: argparse.Namespace) -> int:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    print("error: `jibun build` is not yet implemented (planned for Phase 3).", file=sys.stderr)
-    return 2
+    from jibun_kit import build as build_mod
+
+    ws = resolve_workspace(args.path)
+    cfg = JibunConfig.load(ws.config_path)
+    return build_mod.run(cfg, args, ws)
 
 
 def _build_ingest_subparsers(p_ing: argparse.ArgumentParser) -> None:
