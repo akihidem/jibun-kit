@@ -17,7 +17,12 @@ import importlib
 REGISTRY: dict[str, str] = {
     "claude-code": "jibun_kit.ingest.claude_code",
     "gmail": "jibun_kit.ingest.gmail",
+    "icloudmail": "jibun_kit.ingest.icloudmail",
+    "imessage": "jibun_kit.ingest.imessage",
     "line": "jibun_kit.ingest.line",
+    "twitter": "jibun_kit.ingest.twitter",
+    "twilog": "jibun_kit.ingest.twilog",
+    "blog": "jibun_kit.ingest.blog",
 }
 
 
