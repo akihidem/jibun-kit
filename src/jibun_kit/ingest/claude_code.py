@@ -23,8 +23,19 @@ from jibun_kit.common import (
     write_session_md,
 )
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "Claude Code の会話ログ (jsonl) から自分の発言を抽出"
+
+GUIDE = SourceGuide(
+    label="Claude Code 会話ログ",
+    captures="Claude Code との会話で、あなた自身が打った発言を取り込みます（AI の応答は含めません）。",
+    how_to_get="export 作業は不要です。この PC の ~/.claude/projects/ 配下に会話ログ（jsonl）が"
+               "既にあります。その dir を指定するだけです。",
+    path_flags={"dir": "--projects-root"},
+    identity_keys=("sources.claude_code.projects_root",),
+    fixed_argv=("--all",),
+)
 
 
 def is_operator_message(entry: dict) -> bool:

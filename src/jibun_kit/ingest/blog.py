@@ -21,8 +21,19 @@ from urllib.parse import urlparse
 
 from jibun_kit.common import append_index, data_dir
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "sources/blog.md の URL から本文を取得（要 [fetch]）"
+
+GUIDE = SourceGuide(
+    label="ブログ記事",
+    captures="あなたが書いたブログ記事の本文を URL から取得して取り込みます。",
+    how_to_get="取り込みたい記事の URL をこの後の質問で 1 行ずつ教えてください"
+               "（sources/blog.md に追記し、そこから取得します）。",
+    identity_keys=("fetch.contact",),
+    asks=("urls",),
+    needs_fetch_extra=True,
+)
 
 URL_RE = re.compile(r"https?://[^\s\)\]<>\"']+")
 RATE_LIMIT_SEC = 1.5

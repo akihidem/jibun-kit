@@ -23,8 +23,18 @@ from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir, write_session_md
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "iMessage (imessage-exporter txt) から自分の発言を抽出"
+
+GUIDE = SourceGuide(
+    label="iMessage（imessage-exporter）",
+    captures="iMessage であなたが送ったメッセージを取り込みます。",
+    how_to_get="Mac で imessage-exporter（brew install imessage-exporter）を txt 形式で実行 → "
+               "出力 dir（または単一 txt）のパスを指定します。",
+    path_flags={"file": "--file", "dir": "--raw-dir"},
+    identity_keys=("identity.imessage_label",),
+)
 
 # "May 11, 2026  3:14:09 PM" 形式
 _DATE_RE = re.compile(r"^([A-Z][a-z]+ \d{1,2}, \d{4})\s+(\d{1,2}:\d{2}:\d{2}\s+[AP]M)\s*$")

@@ -22,8 +22,18 @@ from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir, write_session_md
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "LINE トーク履歴 (.txt) から自分の発言を抽出"
+
+GUIDE = SourceGuide(
+    label="LINE トーク履歴",
+    captures="LINE のトークであなたが送った発言を取り込みます（相手の発言・スタンプ等は除外）。",
+    how_to_get="スマホの LINE で対象トークを開く → メニュー > その他 > トーク履歴を送信 → "
+               ".txt をこの PC に送り、そのパスを指定します（複数なら dir にまとめても OK）。",
+    path_flags={"file": "--file", "dir": "--raw-dir"},
+    identity_keys=("identity.line_name",),
+)
 
 # 2026/05/11(月) や 2026/5/11(月)
 _DATE_LINE = re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})\([月火水木金土日]\)$")

@@ -20,8 +20,21 @@ from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir, write_session_md
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "twilog から自分の過去ツイートを取得（要 [fetch]）"
+
+GUIDE = SourceGuide(
+    label="twilog（過去ツイートの Web 取得）",
+    captures="twilog.togetter.com に記録された過去ツイートを期間指定で取得します"
+             "（X 公式エクスポートが手元に無い場合の代替）。",
+    how_to_get="twilog に登録済みであることが前提です。ユーザー名・取得期間・クロール時の連絡先"
+               "（User-Agent に載せるメールアドレス等）をこの後の質問で聞きます。"
+               "1 ページ 2 秒の礼儀クロールなので期間は控えめに。",
+    identity_keys=("identity.twilog_user", "fetch.contact"),
+    asks=("date_range",),
+    needs_fetch_extra=True,
+)
 
 BASE = "https://twilog.togetter.com"
 RATE_LIMIT_SEC = 2.0
