@@ -122,6 +122,10 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_app(args: argparse.Namespace) -> int:
     # workspace はここで解決しない（未初期化なら Act 0 がその場で scaffold する）
+    if getattr(args, "web", False):
+        from jibun_kit.app import web
+
+        return web.run_web(args)
     from jibun_kit.app import wizard
 
     return wizard.run(args)
@@ -180,6 +184,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_app = sub.add_parser(
         "app", help="対話ウィザード: 取り込み案内 → インタビュー → jibun.md 生成まで対話で進む")
     _add_path_arg(p_app)
+    p_app.add_argument("--web", action="store_true",
+                       help="ブラウザのチャット UI で対話する（127.0.0.1 のみで待ち受け）")
+    p_app.add_argument("--port", type=int, default=8765,
+                       help="--web の待ち受けポート（0 で自動割当、既定 8765）")
+    p_app.add_argument("--no-browser", action="store_true",
+                       help="--web 時にブラウザを自動で開かない")
     p_app.set_defaults(func=cmd_app)
 
     p_build = sub.add_parser("build", help="assemble ingested data into jibun.md")
