@@ -7,9 +7,18 @@ ingest/gmail.py と完全に共通（mbox parser + email フィルタ）。出�
 
 from __future__ import annotations
 
-from jibun_kit.ingest import gmail
+from jibun_kit.ingest import SourceGuide, gmail
 
 HELP = "送信済み mbox (iCloud / Mail.app) から自分のメールを抽出"
+
+GUIDE = SourceGuide(
+    label="iCloud メール（Mail.app）送信済み",
+    captures="Mail.app から書き出した送信済みメールの本文を取り込みます。",
+    how_to_get="Mac の Mail.app で送信済みメールボックスを選択 → メニューの「メールボックス > "
+               "メールボックスを書き出す…」 → 書き出された mbox のパスを指定します。",
+    path_flags={"file": "--mbox"},
+    identity_keys=("identity.emails",),
+)
 
 
 def add_arguments(parser) -> None:

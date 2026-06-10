@@ -18,8 +18,17 @@ from datetime import datetime
 from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir, write_session_md
+from jibun_kit.ingest import SourceGuide
 
 HELP = "Twitter/X 公式 export から自分のツイートを抽出"
+
+GUIDE = SourceGuide(
+    label="X (Twitter) 公式エクスポート",
+    captures="過去の全ツイート（あなたが打った文章）を取り込みます。",
+    how_to_get="X のアプリ/Web で「設定とプライバシー > アカウント > データのアーカイブをダウンロード」"
+               "を申請 → 後日届く zip を展開し、その dir のパスを指定します（中に data/tweets.js があります）。",
+    path_flags={"dir": "--export-dir"},
+)
 
 # tweets.js 先頭の代入文プレフィクス
 _PREFIX = re.compile(r"^\s*window\.YTD\.tweets\.part\d+\s*=\s*", re.S)

@@ -26,8 +26,18 @@ from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir
 from jibun_kit.config import resolve
+from jibun_kit.ingest import SourceGuide
 
 HELP = "送信済み mbox (Gmail Takeout) から自分のメールを抽出"
+
+GUIDE = SourceGuide(
+    label="Gmail 送信済みメール",
+    captures="あなたが書いて送ったメールの本文を取り込みます（受信メールは対象外）。",
+    how_to_get="Google Takeout (takeout.google.com) で「メール」だけ選択してエクスポート → "
+               "届いた zip を展開し、送信済みメールを含む mbox ファイルのパスを指定します。",
+    path_flags={"file": "--mbox"},
+    identity_keys=("identity.emails",),
+)
 
 QUOTE_LINE = re.compile(r"^>")
 ON_WROTE = re.compile(r"^\s*(On|>?\s*On)\s+.+\s+wrote:\s*$|^\d{4}年.+に.+さん.*が書きました:\s*$")
