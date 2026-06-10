@@ -85,7 +85,10 @@ def _generate(prompter: Prompter, ws: Workspace, art, *,
               current_draft: str | None, feedback) -> str | None:
     """draft の生成（初回）/ 改訂。None = ユーザーが中断（案内済み）。"""
     if current_draft is None:
-        payload = f"{art.prompt}\n\n---\n\n{art.bundle}"
+        payload = (f"{art.prompt}\n\n"
+                   "出力は jibun.md の本文のみ。前置き・後書きを書かず、"
+                   "コードフェンスで囲まない。\n\n---\n\n"
+                   f"{art.bundle}")
         prompter.say("\nclaude で下書きを生成中（数分かかることがあります）...")
     else:
         bullets = "\n".join(f"- {heading}: {comment}" for heading, comment in feedback)

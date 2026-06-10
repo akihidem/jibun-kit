@@ -5,7 +5,7 @@
 `jibun-kit` は、あなたが**自ら打った文章・送った言葉**（Claude Code 会話 / 送信メール / LINE・iMessage / X / blog …）をローカルで集め、観察→仮説→（任意で）解釈の**単一 Markdown** にまとめます。
 人間向け / AI 向けにファイルを分けません。原本は人間が読める Markdown ひとつ。AI に渡す内容と人間が読む内容を分岐させない、という原則で設計しています。
 
-> ⚠️ Status: **alpha**。ingest（8 source）と build まで動作。配布形態（PyPI / public）と LICENSE は確定前。
+> ⚠️ Status: **alpha**。ingest（8 source + interview）/ build / 対話モード（`jibun app`）まで動作。配布形態（PyPI / public）と LICENSE は確定前。
 
 ## 設計の柱
 
@@ -25,6 +25,16 @@ pip install -e '.[fetch,test]'   # core だけなら: pip install -e .
 Python 3.11+（stdlib `tomllib` 利用）。
 
 ## クイックスタート
+
+### 対話で（推奨）
+
+```bash
+jibun app
+```
+
+1 コマンドで、workspace 作成 → 「どのデータを取り込めるか」の提案・入手方法の案内 → インタビュー → `jibun.md` 生成まで対話で進みます。Ctrl-C で中断しても次回続きから再開できます。詳細は[対話モード](#対話モードjibun-app)。
+
+### 手動で（CLI を個別に）
 
 ```bash
 # 1. workspace を scaffold（jibun.md / jibun.toml / data/ / sources/）
@@ -61,14 +71,29 @@ jibun build --with-claude    # PATH に claude があれば claude -p で draft 
 | `twitter` | X 公式 export（tweets.js） | —（export-dir 指定） | stdlib |
 | `twilog` | twilog.togetter.com | `identity.twilog_user` + `fetch.contact` | `[fetch]` |
 | `blog` | `sources/blog.md` の URL | `fetch.contact` | `[fetch]` |
+| `interview` | `jibun app` の対話質問への回答（自己申告） | — | stdlib |
 
-`telegram` は v1 では未対応。
+`telegram` は v1 では未対応。`interview` は app 専用（`jibun ingest interview` は無い）。
+
+## 対話モード（jibun app）
+
+`jibun app` は 3 幕の対話ウィザード。**export を何も持っていない人でも、質問に答えるだけで jibun.md を作れる**。
+
+1. **取り込み（Act 1）** — 8 source を順に「何が取り込めるか」提案し、持っていなければ入手方法（X のアーカイブ請求、Google Takeout など）を案内。identity（メールアドレス・LINE 表示名など）は対話で聞いて `jibun.toml` に保存し、次回からは聞かない。取り込みは必ず `--dry-run` プレビュー → 確認 → 本実行。
+2. **インタビュー（Act 2）** — 組み込み質問 約 15 問（全てスキップ可）。回答は `data/interview/` に自己申告ソースとして記録され、そのまま build の素材になる。
+3. **ビルド（Act 3）** — draft を生成し、セクションごとに「ここは合ってる？」と確認 → コメントを反映して改訂 → 納得したら明示確認のうえ `jibun.md` に保存（既存の jibun.md は `_build/<date>/jibun.previous.md` に退避）。
+
+補足:
+
+- **claude はあってもなくてもよい。** PATH に `claude` があり、その操作ごとに y/N（既定 No）で同意したときだけ「追い質問の生成」「draft 生成・改訂」に使う。無ければ・同意しなければ、従来どおり prompt + bundle を自分の AI に貼る案内になる（egress ゼロで完走できる）。
+- **中断・再開。** Ctrl-C でいつでも中断。進捗は `data/interview/.progress.json`（gitignore 対象）に逐次保存され、次回 `jibun app` で続きから再開できる。同日にやり直しても前のインタビューは `.2.md` 連番で保護される。
 
 ## プライバシーモデル
 
 - `data/`（生データ）と `_build/`（bundle）は workspace の `.gitignore` で除外。
 - repo に追跡されるのは `sources/*-index.md`（取り込み済みのメタ）と、人手でレビュー済みの `jibun.md` のみ。
 - `jibun build` の既定は外部送信なし。`--with-claude` を明示したときだけローカルの `claude` に渡す。
+- `jibun app` も同じ原則: claude の利用（追い質問・draft 生成・改訂）は**操作ごとに明示同意**（y/N、既定 No）。同意しなければ外部送信ゼロのまま完走できる。送信経路はコード上も `claude_cli` モジュール 1 か所のみ。
 
 ## 診断スタンス（倫理）
 
