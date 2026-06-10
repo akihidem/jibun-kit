@@ -1,9 +1,15 @@
 from jibun_kit.app.prompter import StdioPrompter, confirm_egress
 
 
-def _feed(monkeypatch, answers):
+def _feed(monkeypatch, answers, prompts=None):
     it = iter(answers)
-    monkeypatch.setattr("builtins.input", lambda _prompt="": next(it))
+
+    def fake_input(prompt=""):
+        if prompts is not None:
+            prompts.append(prompt)
+        return next(it)
+
+    monkeypatch.setattr("builtins.input", fake_input)
 
 
 def test_confirm_variants(monkeypatch):
@@ -59,9 +65,10 @@ def test_ask_multiline_ends_on_blank(monkeypatch):
 
 def test_confirm_egress_default_no(monkeypatch, capsys):
     p = StdioPrompter()
-    _feed(monkeypatch, [""])
+    prompts: list[str] = []
+    _feed(monkeypatch, [""], prompts)
     assert confirm_egress(p, "テスト送信") is False
     out = capsys.readouterr().out
     assert "外部送信" in out
     assert "テスト送信" in out
-    assert "[y/N]" in out
+    assert any("[y/N]" in q for q in prompts)  # 既定 No の表記
