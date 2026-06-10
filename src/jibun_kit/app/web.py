@@ -9,9 +9,16 @@ put する。**egress はこの層では発生しない**（claude 同意フロ�
 
 from __future__ import annotations
 
+import json
 import queue
 import secrets
+import sys
 import threading
+import traceback
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib import resources
+from urllib.parse import parse_qs, urlparse
 
 # 中断 sentinel: deliver/request_abort が put し、prompter メソッドが
 # KeyboardInterrupt に変換する（wizard.run が rc 130 に変換 = TUI Ctrl-C と同経路）
@@ -142,3 +149,202 @@ class WebPrompter:
                 "done": st.done,
                 "rc": st.rc,
             }
+
+
+# --- HTTP 層 ---
+
+_MAX_BODY = 1 * 1024 * 1024  # POST body 上限
+
+
+def _load_html() -> str:
+    return resources.files("jibun_kit.app").joinpath("webui.html").read_text(encoding="utf-8")
+
+
+class _Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # タブを閉じた瞬間の切断は正常系。それ以外は通常どおり stderr へ
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
+
+
+class _Handler(BaseHTTPRequestHandler):
+    """UI 配信 + JSON API。共有状態は ``self.server.app``（AppServer）経由。"""
+
+    server_version = "jibun-app"
+
+    @property
+    def app(self) -> "AppServer":
+        return self.server.app  # type: ignore[attr-defined]
+
+    def log_message(self, format, *args):  # noqa: A002 (基底クラスの契約)
+        pass  # アクセスログは出さない（個人ローカルツール）
+
+    # --- helpers ---
+
+    def _host_ok(self) -> bool:
+        # DNS rebinding 対策: ブラウザが付ける Host を検査
+        host = self.headers.get("Host", "")
+        return host in {f"127.0.0.1:{self.app.port}", f"localhost:{self.app.port}"}
+
+    def _token_ok(self) -> bool:
+        return self.headers.get("X-Jibun-Token", "") == self.app.prompter.state.token
+
+    def _send_json(self, status: int, payload: dict) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self):
+        """POST body を dict で返す。"too_large" / None（不正）の場合あり。"""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return None
+        if length < 0 or length > _MAX_BODY:
+            return "too_large"
+        raw = self.rfile.read(length)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    # --- routes ---
+
+    def do_GET(self):
+        if not self._host_ok():
+            return self._send_json(403, {"error": "bad host"})
+        parsed = urlparse(self.path)
+        if parsed.path == "/":
+            html = self.app.html.replace("{{TOKEN}}", self.app.prompter.state.token)
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")  # 前回 run の古い token を残さない
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/state":
+            if not self._token_ok():
+                return self._send_json(403, {"error": "bad token"})
+            try:
+                since = int(parse_qs(parsed.query).get("since", ["0"])[0])
+            except ValueError:
+                return self._send_json(400, {"error": "bad since"})
+            if since < 0:
+                return self._send_json(400, {"error": "bad since"})
+            snap = self.app.prompter.snapshot(since)
+            self._send_json(200, snap)
+            if snap["done"]:
+                # done をブラウザへ届け終えた → 自動シャットダウンの握手
+                self.app.prompter.state.final_seen.set()
+            return
+        if parsed.path in ("/api/answer", "/api/abort"):
+            return self._send_json(405, {"error": "method not allowed"})
+        self._send_json(404, {"error": "not found"})
+
+    def do_POST(self):
+        if not self._host_ok():
+            return self._send_json(403, {"error": "bad host"})
+        path = urlparse(self.path).path
+        if path == "/api/state":
+            return self._send_json(405, {"error": "method not allowed"})
+        if path not in ("/api/answer", "/api/abort"):
+            return self._send_json(404, {"error": "not found"})
+        if not self._token_ok():
+            return self._send_json(403, {"error": "bad token"})
+        if path == "/api/abort":
+            self.app.prompter.request_abort()
+            return self._send_json(200, {"ok": True})
+        data = self._read_json()
+        if data == "too_large":
+            return self._send_json(413, {"error": "body too large"})
+        if data is None or "prompt_id" not in data or "value" not in data:
+            return self._send_json(400, {"error": "bad request"})
+        result = self.app.prompter.deliver(data["prompt_id"], data["value"])
+        if result == "ok":
+            return self._send_json(200, {"ok": True})
+        if result == "stale":
+            return self._send_json(409, {"error": "stale"})
+        return self._send_json(400, {"error": "invalid value"})
+
+
+class AppServer:
+    """サーバ一式（bind・wizard スレッド・shutdown 握手）。
+
+    テストは ``AppServer(args, grace=0.5)`` を port 0 で作り ``.port`` を読む。
+    """
+
+    def __init__(self, args, *, grace: float = 10.0):
+        self.args = args
+        self.grace = grace
+        self.prompter = WebPrompter()
+        self.html = _load_html()
+        self.httpd = _Server(("127.0.0.1", getattr(args, "port", 8765)), _Handler)
+        self.httpd.app = self  # type: ignore[attr-defined]
+        self.port = self.httpd.server_address[1]  # --port 0 なら実ポートに解決済み
+
+    def start_wizard(self) -> None:
+        from jibun_kit.app import wizard
+
+        def target():
+            st = self.prompter.state
+            try:
+                rc = wizard.run(self.args, prompter=self.prompter)
+            except BaseException as e:  # 想定外 — ブラウザを永久「考え中」にしない
+                traceback.print_exc()
+                with st.lock:
+                    st.transcript.append(
+                        {"kind": "say", "text": f"エラーが発生しました: {e}"})
+                rc = 1
+            with st.lock:
+                st.done = True
+                st.rc = rc
+                if rc == 130:
+                    st.transcript.append(
+                        {"kind": "say",
+                         "text": "進捗を保存しました。`jibun app` でいつでも続きから再開できます。"})
+            # done をブラウザが受け取るまで grace 待ち、来なくても必ず止める
+            st.final_seen.wait(timeout=self.grace)
+            self.httpd.shutdown()  # 唯一の shutdown 呼び出し元
+
+        threading.Thread(target=target, daemon=True).start()
+
+    def serve(self) -> int:
+        st = self.prompter.state
+        try:
+            self.httpd.serve_forever(poll_interval=0.1)
+        except KeyboardInterrupt:
+            self.httpd.server_close()
+            print("\n\n進捗を保存しました。`jibun app --web` でいつでも続きから再開できます。")
+            return 130
+        self.httpd.server_close()
+        with st.lock:
+            return st.rc if st.rc is not None else 130
+
+
+def run_web(args) -> int:
+    """``jibun app --web`` のエントリポイント。"""
+    try:
+        server = AppServer(args)
+    except OSError as e:
+        print(f"error: ポート {getattr(args, 'port', '?')} で待ち受けできません（{e}）。"
+              "--port で別の番号を指定してください。", file=sys.stderr)
+        return 1
+    url = f"http://127.0.0.1:{server.port}/"
+    # WSL 等では webbrowser.open が無音 no-op のことがあるため URL は必ず表示する
+    print(f"jibun app (web) — {url} をブラウザで開いてください（終了はターミナルで Ctrl-C）")
+    server.start_wizard()
+    if not getattr(args, "no_browser", False):
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    return server.serve()
