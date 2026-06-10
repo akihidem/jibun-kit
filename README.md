@@ -88,12 +88,28 @@ jibun build --with-claude    # PATH に claude があれば claude -p で draft 
 - **claude はあってもなくてもよい。** PATH に `claude` があり、その操作ごとに y/N（既定 No）で同意したときだけ「追い質問の生成」「draft 生成・改訂」に使う。無ければ・同意しなければ、従来どおり prompt + bundle を自分の AI に貼る案内になる（egress ゼロで完走できる）。
 - **中断・再開。** Ctrl-C でいつでも中断。進捗は `data/interview/.progress.json`（gitignore 対象）に逐次保存され、次回 `jibun app` で続きから再開できる。同日にやり直しても前のインタビューは `.2.md` 連番で保護される。
 
+### Web UI（jibun app --web）
+
+```bash
+jibun app --web            # http://127.0.0.1:8765/ にチャット UI（ブラウザを自動で開く）
+jibun app --web --port 0   # ポート自動割当
+jibun app --web --no-browser
+```
+
+ターミナルの代わりにブラウザのチャット画面で同じ 3 幕を進めるモード。中身は同一（対話エンジンは UI 非依存で、Web はその「シェル」）。
+
+- **127.0.0.1 のみ**で待ち受け、ページは外部アセットを一切参照しない。データがこの PC から出る経路は従来どおり claude への明示同意だけ
+- タブを閉じても大丈夫 — 同じ URL を開き直せば会話が全再生される。終了はターミナルの Ctrl-C（進捗は保存済み）、画面右上の「中断」でも保存して止まる
+- WSL ではブラウザが自動で開かないことがある。表示される URL を Windows 側ブラウザで開けばよい（localhost は WSL に転送される）
+- 同一マシンの他ユーザーからのアクセス防御は範囲外（個人マシン前提のローカルツール）
+
 ## プライバシーモデル
 
 - `data/`（生データ）と `_build/`（bundle）は workspace の `.gitignore` で除外。
 - repo に追跡されるのは `sources/*-index.md`（取り込み済みのメタ）と、人手でレビュー済みの `jibun.md` のみ。
 - `jibun build` の既定は外部送信なし。`--with-claude` を明示したときだけローカルの `claude` に渡す。
 - `jibun app` も同じ原則: claude の利用（追い質問・draft 生成・改訂）は**操作ごとに明示同意**（y/N、既定 No）。同意しなければ外部送信ゼロのまま完走できる。送信経路はコード上も `claude_cli` モジュール 1 か所のみ。
+- `jibun app --web` は 127.0.0.1 のみで待ち受け、UI は外部アセットを参照しない（CDN なし）。Web 層は新しい送信経路を作らない。
 
 ## 診断スタンス（倫理）
 
