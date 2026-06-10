@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jibun app</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f5f4f0; --app: #ffffff; --user: #2b6cb0; --user-text: #ffffff;
+    --text: #2d3142; --muted: #8a8f98; --border: #e2e0da; --accent: #2b6cb0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    font-size: 15px; line-height: 1.7;
+  }
+  header {
+    position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 10px 16px; display: flex; justify-content: space-between; align-items: baseline;
+    z-index: 2;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header a { color: var(--muted); font-size: 12px; text-decoration: none; }
+  header a:hover { color: var(--accent); }
+  #chat { max-width: 46rem; margin: 0 auto; padding: 16px 16px 140px; }
+  .bubble {
+    background: var(--app); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin: 8px auto 8px 0; max-width: 92%;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .bubble.user {
+    background: var(--user); color: var(--user-text); border: none;
+    margin: 8px 0 8px auto; max-width: 80%;
+  }
+  .bubble.prompt { border-left: 3px solid var(--accent); }
+  .bubble .opts { margin-top: 6px; color: var(--muted); font-size: 13px; }
+  #dock {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg); border-top: 1px solid var(--border); padding: 12px 16px 16px;
+  }
+  #widget { max-width: 46rem; margin: 0 auto; }
+  #widget .hint { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  #widget input[type=text], #widget textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font: inherit; background: var(--app); color: var(--text);
+  }
+  #widget textarea { resize: vertical; }
+  #widget .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; padding: 8px 18px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--app); color: var(--text);
+  }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.opt { display: block; width: 100%; text-align: left; margin-top: 6px; }
+  button.opt.default { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .busy { color: var(--muted); }
+  .busy .dots::after { content: "…"; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .banner {
+    max-width: 46rem; margin: 0 auto; padding: 10px 14px; border-radius: 8px;
+    background: #fff8e1; border: 1px solid #e6d9a8;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>jibun app</h1>
+  <span class="sub">127.0.0.1 のみ・データはこの PC から出ません（claude 利用は対話内で明示同意）</span>
+  <a href="#" id="abort">中断</a>
+</header>
+<main id="chat"></main>
+<div id="dock"><div id="widget"></div></div>
+
+<script>
+"use strict";
+const TOKEN = "{{TOKEN}}";
+const chat = document.getElementById("chat");
+const widget = document.getElementById("widget");
+let cursor = 0;
+let currentPromptId = null;
+let finished = false;
+let timer = null;
+
+// 描画は textContent のみ（claude 出力が transcript に流れるため innerHTML は使わない）
+function bubble(text, cls) {
+  const div = document.createElement("div");
+  div.className = "bubble" + (cls ? " " + cls : "");
+  div.textContent = text;
+  return div;
+}
+
+function nearBottom() {
+  return window.innerHeight + window.scrollY >= document.body.scrollHeight - 60;
+}
+
+function renderEntry(e) {
+  if (e.kind === "say") {
+    chat.appendChild(bubble(e.text, ""));
+  } else if (e.kind === "prompt") {
+    const b = bubble(e.text, "prompt");
+    if (e.ptype === "choose") {
+      const opts = document.createElement("div");
+      opts.className = "opts";
+      opts.textContent = e.options.map((o, i) => (i + 1) + ") " + o).join("\n");
+      b.appendChild(opts);
+    }
+    chat.appendChild(b);
+  } else if (e.kind === "answer") {
+    chat.appendChild(bubble(e.display, "user"));
+  }
+}
+
+function setBusy() {
+  widget.replaceChildren();
+  const d = document.createElement("div");
+  d.className = "busy";
+  d.textContent = "考え中";
+  const dots = document.createElement("span");
+  dots.className = "dots";
+  d.appendChild(dots);
+  widget.appendChild(d);
+  currentPromptId = null;
+}
+
+function banner(text) {
+  widget.replaceChildren();
+  const d = document.createElement("div");
+  d.className = "banner";
+  d.textContent = text;
+  widget.appendChild(d);
+}
+
+async function post(path, body) {
+  return fetch(path, {
+    method: "POST",
+    headers: { "X-Jibun-Token": TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+async function submit(value) {
+  const id = currentPromptId;
+  for (const el of widget.querySelectorAll("button, input, textarea")) el.disabled = true;
+  try {
+    const res = await post("/api/answer", { prompt_id: id, value: value });
+    if (res.status === 403) { dead(); return; }
+    if (res.status === 409) { await poll(); return; }   // 別タブが先に回答した
+    if (!res.ok) {
+      for (const el of widget.querySelectorAll("button, input, textarea")) el.disabled = false;
+      return;
+    }
+    setBusy();
+    await poll();
+  } catch (err) {
+    for (const el of widget.querySelectorAll("button, input, textarea")) el.disabled = false;
+  }
+}
+
+function renderWidget(pending) {
+  if (pending.id === currentPromptId) return;  // 入力中テキストを壊さない
+  currentPromptId = pending.id;
+  widget.replaceChildren();
+
+  if (pending.ptype === "ask") {
+    const multi = pending.multiline;
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = multi
+      ? "複数行 OK。Ctrl+Enter または送信で確定、空のまま送信でスキップ"
+      : (pending.default ? "空のまま送信で「" + pending.default + "」" : "空のまま送信でスキップ");
+    const field = document.createElement(multi ? "textarea" : "input");
+    if (multi) field.rows = 6; else field.type = "text";
+    if (pending.default) field.placeholder = pending.default;
+    const row = document.createElement("div");
+    row.className = "row";
+    const send = document.createElement("button");
+    send.className = "primary";
+    send.textContent = "送信";
+    send.onclick = () => submit(field.value);
+    field.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && (multi ? ev.ctrlKey : true) && !ev.isComposing) {
+        ev.preventDefault();
+        submit(field.value);
+      }
+    });
+    row.appendChild(send);
+    widget.append(hint, field, row);
+    field.focus();
+  } else if (pending.ptype === "confirm") {
+    const row = document.createElement("div");
+    row.className = "row";
+    const yes = document.createElement("button");
+    yes.textContent = "はい";
+    const no = document.createElement("button");
+    no.textContent = "いいえ";
+    (pending.default ? yes : no).className = "primary";
+    yes.onclick = () => submit(true);
+    no.onclick = () => submit(false);
+    row.append(yes, no);
+    widget.appendChild(row);
+  } else if (pending.ptype === "choose") {
+    pending.options.forEach((label, i) => {
+      const b = document.createElement("button");
+      b.className = "opt" + (i === pending.default ? " default" : "");
+      b.textContent = (i + 1) + ") " + label;
+      b.onclick = () => submit(i);
+      widget.appendChild(b);
+    });
+  }
+}
+
+function dead() {
+  finished = true;
+  clearInterval(timer);
+  banner("セッションが切れました。ターミナルで `jibun app --web` を再起動し、ページを再読み込みしてください。");
+}
+
+async function poll() {
+  if (finished) return;
+  let res;
+  try {
+    res = await fetch("/api/state?since=" + cursor, { headers: { "X-Jibun-Token": TOKEN } });
+  } catch (err) {
+    return;  // サーバ停止直後など。done 済みなら finished で抜けている
+  }
+  if (res.status === 403) { dead(); return; }
+  if (!res.ok) return;
+  const snap = await res.json();
+  const stick = nearBottom() || cursor === 0;
+  for (const e of snap.entries) renderEntry(e);
+  cursor = snap.next;
+  if (snap.done) {
+    finished = true;
+    clearInterval(timer);
+    banner(snap.rc === 130
+      ? "中断しました。進捗は保存済み — ターミナルの `jibun app` で続きから再開できます（このタブは閉じて OK）"
+      : "ウィザードを終了しました。このタブは閉じて構いません。");
+  } else if (snap.pending) {
+    renderWidget(snap.pending);
+  } else {
+    setBusy();
+  }
+  if (stick && snap.entries.length) window.scrollTo(0, document.body.scrollHeight);
+}
+
+document.getElementById("abort").addEventListener("click", async (ev) => {
+  ev.preventDefault();
+  if (!finished && confirm("中断しますか？（進捗は保存され、続きから再開できます）")) {
+    await post("/api/abort");
+    await poll();
+  }
+});
+
+setBusy();
+poll();
+timer = setInterval(poll, 700);
+</script>
+</body>
+</html>

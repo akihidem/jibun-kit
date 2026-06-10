@@ -106,10 +106,21 @@ def test_invalid_path_three_times_skips(tmp_path):
     assert "3 回" in p.said()
 
 
-def test_dispatch_ingest_catches_systemexit(tmp_path):
+def test_dispatch_ingest_catches_systemexit_and_captures(tmp_path, capsys):
     ws = _scaffold(tmp_path)
-    rc = _dispatch_ingest(ws, "line", ["--bogus"])
-    assert rc == 2  # argparse の usage エラー
+    rc, out = _dispatch_ingest(ws, "line", ["--bogus"])
+    assert rc == 2          # argparse の usage エラー
+    assert "usage" in out   # 出力は捕捉して返す
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""  # 直接は漏らさない
+
+
+def test_dry_run_preview_reaches_prompter(tmp_path):
+    ws = _scaffold(tmp_path)
+    p = ScriptedPrompter(["取り込む", str(FIX / "twitter"), True])
+    status = act_sources._propose_source(p, ws, "twitter", load_source("twitter").GUIDE)
+    assert status == "ingested"
+    assert "DRY would write" in p.said()  # dry-run プレビューが transcript に届く
 
 
 def test_run_act1_resume_skips_done(tmp_path):

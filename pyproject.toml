@@ -36,3 +36,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 jibun_kit = ["templates/*", "prompts/*"]
+"jibun_kit.app" = ["*.html"]

@@ -7,7 +7,9 @@ identity を対話で集めて jibun.toml に永続化し、既存の ingest を
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -190,34 +192,42 @@ def _propose_source(prompter: Prompter, ws: Workspace, name: str,
 
     # dry-run プレビュー → 確認 → 本取り込み
     prompter.say("\nまず書き込みなしで確認します（--dry-run）:")
-    rc = _dispatch_ingest(ws, name, flags + ["--dry-run"])
+    rc, out = _dispatch_ingest(ws, name, flags + ["--dry-run"])
+    if out.strip():
+        prompter.say(out.rstrip())
     if rc != 0:
-        prompter.say("dry-run が失敗しました（上のエラーを参照）。この source はスキップします。")
+        prompter.say("dry-run が失敗しました（上の出力を参照）。この source はスキップします。")
         return "failed"
     if not prompter.confirm("この内容で取り込みますか？", default=True):
         return "skipped"
-    rc = _dispatch_ingest(ws, name, flags)
+    rc, out = _dispatch_ingest(ws, name, flags)
+    if out.strip():
+        prompter.say(out.rstrip())
     if rc == 0:
         prompter.say("✓ 取り込み完了")
         return "ingested"
-    prompter.say("✗ 取り込みに失敗しました（上のエラーを参照）。")
+    prompter.say("✗ 取り込みに失敗しました（上の出力を参照）。")
     return "failed"
 
 
-def _dispatch_ingest(ws: Workspace, source: str, flags: list[str]) -> int:
-    """既存 CLI を argv 経由で呼ぶ。argparse が default / 必須 / 排他を全部処理する。
+def _dispatch_ingest(ws: Workspace, source: str, flags: list[str]) -> tuple[int, str]:
+    """既存 CLI を argv 経由で呼び、(rc, 捕捉した出力) を返す。
 
-    argparse のエラーは SystemExit になるので捕捉して rc に変換
-    （usage は argparse が stderr に出力済み）。
+    argparse が default / 必須 / 排他を全部処理する（SystemExit は rc に変換）。
+    stdout/stderr はバッファで一括捕捉し、表示は呼び出し側が prompter.say で行う
+    — Web UI の transcript にも届く。行ごとのストリーミング捕捉にはしないこと
+    （TUI では say → print → redirect → 再帰になる）。
     """
     from jibun_kit import cli  # 循環 import 回避（cli → app は app コマンド内のみ）
 
     argv = ["ingest", source, "--path", str(ws.root), *flags]
-    try:
-        rc = cli.main(argv)
-    except SystemExit as e:
-        return e.code if isinstance(e.code, int) else 1
-    return rc
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        try:
+            rc = cli.main(argv)
+        except SystemExit as e:
+            rc = e.code if isinstance(e.code, int) else 1
+    return rc, buf.getvalue()
 
 
 def _fetch_extra_available(name: str) -> bool:
