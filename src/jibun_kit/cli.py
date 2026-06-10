@@ -120,6 +120,13 @@ def cmd_build(args: argparse.Namespace) -> int:
     return build_mod.run(cfg, args, ws)
 
 
+def cmd_app(args: argparse.Namespace) -> int:
+    # workspace はここで解決しない（未初期化なら Act 0 がその場で scaffold する）
+    from jibun_kit.app import wizard
+
+    return wizard.run(args)
+
+
 def _build_ingest_subparsers(p_ing: argparse.ArgumentParser) -> None:
     """REGISTRY を駆動して `jibun ingest <source>` の各 sub-subparser を構築。"""
     from jibun_kit.ingest import REGISTRY, load_source
@@ -169,6 +176,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ing = sub.add_parser("ingest", help="ingest a source: `jibun ingest <source> [opts]`")
     _build_ingest_subparsers(p_ing)
     p_ing.set_defaults(func=cmd_ingest)
+
+    p_app = sub.add_parser(
+        "app", help="対話ウィザード: 取り込み案内 → インタビュー → jibun.md 生成まで対話で進む")
+    _add_path_arg(p_app)
+    p_app.set_defaults(func=cmd_app)
 
     p_build = sub.add_parser("build", help="assemble ingested data into jibun.md")
     _add_path_arg(p_build)
