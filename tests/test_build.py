@@ -1,6 +1,6 @@
 import argparse
 
-from jibun_kit import build
+from jibun_kit import build, claude_cli
 from jibun_kit.config import JibunConfig
 
 
@@ -60,3 +60,43 @@ def test_output_path_override_shown(tmp_workspace, capsys):
     target = tmp_workspace.root / "custom.md"
     build.run(JibunConfig(), _args(output=target), tmp_workspace)
     assert str(target) in capsys.readouterr().out
+
+
+def test_with_claude_writes_draft(tmp_workspace, monkeypatch):
+    _seed(tmp_workspace)
+    sent: dict = {}
+
+    def fake_run_claude(text, **kw):
+        sent["input"] = text
+        return "# jibun.md draft\n"
+
+    monkeypatch.setattr(claude_cli, "find_claude", lambda: "/fake/claude")
+    monkeypatch.setattr(claude_cli, "run_claude", fake_run_claude)
+    rc = build.run(JibunConfig(), _args(with_claude=True), tmp_workspace)
+    assert rc == 0
+    draft = next(tmp_workspace.build_root.glob("*/jibun.draft.md"))
+    assert draft.read_text(encoding="utf-8") == "# jibun.md draft\n"
+    assert "my own words" in sent["input"]        # prompt+bundle が渡っている
+    assert not tmp_workspace.jibun_md.exists()    # 自動昇格はしない
+
+
+def test_with_claude_error_returns_1(tmp_workspace, monkeypatch, capsys):
+    _seed(tmp_workspace)
+
+    def boom(text, **kw):
+        raise claude_cli.ClaudeError("claude returned 3", returncode=3, stderr="ctx overflow")
+
+    monkeypatch.setattr(claude_cli, "find_claude", lambda: "/fake/claude")
+    monkeypatch.setattr(claude_cli, "run_claude", boom)
+    rc = build.run(JibunConfig(), _args(with_claude=True), tmp_workspace)
+    assert rc == 1
+    assert "claude returned 3: ctx overflow" in capsys.readouterr().err
+
+
+def test_with_claude_fallback_without_cli(tmp_workspace, monkeypatch, capsys):
+    _seed(tmp_workspace)
+    monkeypatch.setattr(claude_cli, "find_claude", lambda: None)
+    rc = build.run(JibunConfig(), _args(with_claude=True), tmp_workspace)
+    assert rc == 0
+    assert "貼り付けフローにフォールバック" in capsys.readouterr().err
+    assert not list(tmp_workspace.build_root.glob("*/jibun.draft.md"))
