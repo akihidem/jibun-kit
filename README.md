@@ -5,7 +5,7 @@
 `jibun-kit` は、あなたが**自ら打った文章・送った言葉**（Claude Code 会話 / 送信メール / LINE・iMessage / X / blog …）をローカルで集め、観察→仮説→（任意で）解釈の**単一 Markdown** にまとめます。
 人間向け / AI 向けにファイルを分けません。原本は人間が読める Markdown ひとつ。AI に渡す内容と人間が読む内容を分岐させない、という原則で設計しています。
 
-> ⚠️ Status: **alpha**。ingest（8 source + interview）/ build / 対話モード（`jibun app`）まで動作。配布形態（PyPI / public）と LICENSE は確定前。
+> ⚠️ Status: **alpha**。ingest（8 source + interview）/ build / 対話モード（`jibun app`）まで動作。PyPI 配布は未定。
 
 ## 設計の柱
 
@@ -17,7 +17,7 @@
 ## インストール
 
 ```bash
-git clone <repo-url> jibun-kit && cd jibun-kit
+git clone https://github.com/akihidem/jibun-kit.git && cd jibun-kit
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e '.[fetch,test]'   # core だけなら: pip install -e .
 ```
@@ -125,7 +125,9 @@ pytest -q
 
 ## ライセンス
 
-確定前。コードは MIT、方法論プロンプト（`prompts/build_prompt.md`）は CC BY-SA 4.0 の dual を検討中。
+- **コード・テンプレート**: [MIT](LICENSE)
+- **方法論プロンプト**（`src/jibun_kit/prompts/build_prompt.md`）のみ: [CC BY-SA 4.0](src/jibun_kit/prompts/LICENSE) — 方法論を改変して**公開・再配布**する場合は同条件で共有してください（非公開利用に共有義務はありません）
+- **生成物はあなたのもの**: このキットで生成された jibun.md に本リポジトリのライセンスは及びません。スターターテンプレート由来の定型文にも権利を主張しません
 
 ## 由来
 

@@ -17,6 +17,10 @@
 - `jibun app` の claude 利用は操作ごとの明示同意（既定 No）。interview の回答・進捗（`.progress.json`）は `data/` 配下で gitignore 対象。
 - `jibun build --effort` は現状 parse のみで `claude -p` に渡していない（既知、別途対応）。
 - `telegram` source は v1 では未対応（upstream stub）。
-- 配布形態（PyPI / public）・LICENSE は未確定。
+- **2026-06-11: LICENSE 確定・repo public 化** — コード/テンプレートは MIT、方法論プロンプト
+  （prompts/build_prompt.md）のみ CC BY-SA 4.0 のデュアル。生成された jibun.md には
+  いずれのライセンスも及ばない（生成物は利用者のもの）。スターターテンプレートを
+  CC BY-SA にしなかったのは、定型文が利用者の jibun.md に残るため SA が個人文書を
+  汚染しないようにする意図。PyPI 配布は引き続き未定。
 
 [Unreleased]: https://github.com/akihidem/jibun-kit/commits/main

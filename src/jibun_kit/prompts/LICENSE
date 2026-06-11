@@ -1,0 +1,21 @@
+このディレクトリの方法論プロンプト（build_prompt.md）は
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+で提供されます。
+
+The methodology prompt in this directory (build_prompt.md) is licensed under
+the Creative Commons Attribution-ShareAlike 4.0 International license.
+
+- 帰属表示 / Attribution: akihidem — jibun-kit
+  https://github.com/akihidem/jibun-kit
+- ライセンス全文 / Full legal code:
+  https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+要点（参考訳であり、正文はライセンス全文）:
+- 共有・改変は自由（商用含む）
+- 帰属表示が必要
+- 改変版を「公開・再配布」する場合は同じ CC BY-SA 4.0 で共有すること
+  （非公開での利用・改変には共有義務は生じない）
+
+注: このライセンスはプロンプト本文（方法論の記述）に適用されるものであり、
+このプロンプトを使って生成されたあなたの jibun.md には適用されません。
+生成物はあなたのものです。
