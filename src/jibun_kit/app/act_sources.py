@@ -145,7 +145,13 @@ def _propose_source(prompter: Prompter, ws: Workspace, name: str,
     flags: list[str] = list(guide.fixed_argv)
 
     # identity を集めて jibun.toml に永続化（次回・他 source が再利用できる）
-    cfg = JibunConfig.load(ws.config_path)
+    try:
+        cfg = JibunConfig.load(ws.config_path)
+    except ValueError as e:  # tomllib.TOMLDecodeError は ValueError の派生
+        # 手編集で壊れた toml。ingest 側も同じ toml を読むので、この source は進めない
+        prompter.say(f"jibun.toml を読めませんでした（{e}）。"
+                     "jibun.toml を直接編集して直してから、もう一度実行してください。")
+        return "failed"
     updates: dict[str, dict[str, object]] = {}
     for key in guide.identity_keys:
         if key == "sources.claude_code.projects_root":
@@ -165,7 +171,14 @@ def _propose_source(prompter: Prompter, ws: Workspace, name: str,
         section, _, leaf = key.rpartition(".")
         updates.setdefault(section, {})[leaf] = value
     if updates:
-        set_toml_values(ws.config_path, updates)
+        try:
+            set_toml_values(ws.config_path, updates)
+        except ValueError as e:
+            # 手書きの複数行 array 等。identity が永続化できないと ingest が使えないのでスキップ
+            prompter.say(f"jibun.toml を自動更新できませんでした（{e}）。"
+                         "jibun.toml を直接編集してから、もう一度実行してください。"
+                         "この source はスキップします。")
+            return "skipped"
         prompter.say("jibun.toml に保存しました（次回からは聞きません）。")
 
     # データの場所
@@ -176,8 +189,14 @@ def _propose_source(prompter: Prompter, ws: Workspace, name: str,
         flag, path = picked
         flags += [flag, str(path)]
         if name == "claude-code":
-            set_toml_values(ws.config_path,
-                            {"sources.claude_code": {"projects_root": str(path)}})
+            # 相対パス・~ のまま保存すると実行時の cwd で意味が変わるので絶対パスで保存
+            try:
+                set_toml_values(ws.config_path, {"sources.claude_code": {
+                    "projects_root": str(path.expanduser().resolve())}})
+            except ValueError as e:
+                # 今回はフラグでパスを渡すので取り込みは続行できる。永続化だけ諦める
+                prompter.say(f"jibun.toml を自動更新できませんでした（{e}）。"
+                             "次回も使うなら jibun.toml を直接編集してください。")
 
     # 追加の構造化質問
     for ask_kind in guide.asks:
@@ -226,7 +245,11 @@ def _dispatch_ingest(ws: Workspace, source: str, flags: list[str]) -> tuple[int,
         try:
             rc = cli.main(argv)
         except SystemExit as e:
-            rc = e.code if isinstance(e.code, int) else 1
+            # sys.exit() / SystemExit(None) は成功扱い（Python の終了コード規約に合わせる）
+            if e.code is None:
+                rc = 0
+            else:
+                rc = e.code if isinstance(e.code, int) else 1
     return rc, buf.getvalue()
 
 

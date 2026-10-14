@@ -28,6 +28,7 @@ META_TAG_PREFIXES: tuple[str, ...] = (
     "<local-command-stdout>",
     "<local-command-stderr>",
     "[tool_result]",
+    "[Request interrupted by user",
 )
 
 
@@ -77,14 +78,19 @@ def extract_text_parts(content) -> str:
 def append_index(ws: "Workspace", source: str, line: str) -> None:
     """``ws.sources_root/<source>-index.md`` に 1 行追記（重複は無視）。"""
     index_path = ws.sources_root / f"{source}-index.md"
+    line = line.rstrip()
     if index_path.exists():
         existing = index_path.read_text(encoding="utf-8")
-        if line in existing:
+        # 行単位の完全一致で重複判定する。部分文字列で見ると
+        # "from=a.mbox" が既存の "from=a.mbox.bak" に含まれる等で新しい行が黙って落ちる。
+        if line in existing.splitlines():
             return
+        if existing and not existing.endswith("\n"):
+            existing += "\n"
     else:
         index_path.parent.mkdir(parents=True, exist_ok=True)
         existing = f"# sources/{source}-index.md\n\n取り込み済みセッション一覧。\n\n"
-    index_path.write_text(existing + line.rstrip() + "\n", encoding="utf-8")
+    index_path.write_text(existing + line + "\n", encoding="utf-8")
 
 
 def write_session_md(path: Path, header: dict, messages: Iterable[tuple[str, str]]) -> int:

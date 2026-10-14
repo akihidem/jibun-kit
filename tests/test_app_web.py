@@ -369,3 +369,13 @@ def test_cli_without_web_routes_wizard(monkeypatch, tmp_path):
     import jibun_kit.app.wizard as wizard_mod
     monkeypatch.setattr(wizard_mod, "run", lambda args, prompter=None: 0)
     assert cli.main(["app", "--path", str(tmp_path)]) == 0
+
+
+def test_index_sends_framing_protection(tmp_path):
+    # 他サイトの iframe に埋め込ませない（clickjacking 対策）
+    server, _t, _box = _start_server(tmp_path)
+    req = urllib.request.Request(f"http://127.0.0.1:{server.port}/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+        assert resp.headers.get("Content-Security-Policy") == "frame-ancestors 'none'"

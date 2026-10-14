@@ -43,6 +43,10 @@ def is_operator_message(entry: dict) -> bool:
         return False
     if entry.get("isSidechain"):
         return False
+    # isMeta（"Caveat: The messages below were generated..." 等）と isCompactSummary
+    # （自動要約の本文）は type=user でも Claude Code が差し込んだ物で、本人の発言ではない
+    if entry.get("isMeta") or entry.get("isCompactSummary"):
+        return False
     msg = entry.get("message") or {}
     if msg.get("role") != "user":
         return False
@@ -143,10 +147,13 @@ def run(config, args, ws) -> int:
         print(f"error: projects root not found: {projects_root}", file=sys.stderr)
         return 1
 
+    # ~/.claude/projects/ は <project-slug>/<session-id>.jsonl の 2 階層なので、
+    # 直下だけでなく配下を再帰で探す（直下だけ見ると既定の指定で 0 件になる）
     if args.session:
-        targets = [projects_root / f"{args.session}.jsonl"]
+        found = sorted(projects_root.rglob(f"{args.session}.jsonl"))
+        targets = found or [projects_root / f"{args.session}.jsonl"]
     elif args.all or args.since or args.until:
-        targets = sorted(projects_root.glob("*.jsonl"))
+        targets = sorted(projects_root.rglob("*.jsonl"))
     else:
         print("error: --session か --all/--since/--until のいずれかが必要です。", file=sys.stderr)
         return 2

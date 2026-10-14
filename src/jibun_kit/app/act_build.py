@@ -6,7 +6,8 @@ claude 同意なしなら従来の貼り付け案内、同意ありなら draft 
 現ドラフト + フィードバックだけを送り、**bundle は再送しない**。
 
 保存は明示確認のうえでのみ。既存の jibun.md（starter 以外）は
-``_build/<date>/jibun.previous.md`` に退避してから上書きする。
+``_build/<date>/jibun.previous.md``（既にあれば ``jibun.previous.2.md`` …）に
+退避してから上書きする。
 """
 
 from __future__ import annotations
@@ -115,11 +116,22 @@ def _generate(prompter: Prompter, ws: Workspace, art, *,
                 prompter.say(f"中断しました。素材とドラフトは {art.build_dir} にあります。")
             return None
         break
+    if not _has_body(out):
+        # 空・空白のみ・フェンスだけの出力を draft にすると jibun.md を空で上書きしうる
+        prompter.say("claude の出力が空でした。ドラフトは作成しません"
+                     f"（素材は {art.build_dir} にあります。時間をおいて再実行してください）。")
+        return None
     draft = out.strip() + "\n"
     path = _next_draft_path(art.build_dir)
     path.write_text(draft, encoding="utf-8")
     prompter.say(f"draft 保存: {path}")
     return draft
+
+
+def _has_body(out: str) -> bool:
+    """コードフェンス行（```...）以外に中身が 1 行でもあれば True。"""
+    return any(line.strip() and not line.strip().startswith("```")
+               for line in out.splitlines())
 
 
 def _split_sections(draft: str) -> list[str]:
@@ -159,13 +171,23 @@ def _log_feedback(build_dir: Path, round_no: int, feedback) -> None:
 
 
 def _next_draft_path(build_dir: Path) -> Path:
-    base = build_dir / "jibun.draft.md"
+    return _next_numbered_path(build_dir, "jibun.draft")
+
+
+def _next_backup_path(build_dir: Path) -> Path:
+    # 同日 2 回目以降の保存で前回の退避（＝本人の原本の可能性）を上書きしない
+    return _next_numbered_path(build_dir, "jibun.previous")
+
+
+def _next_numbered_path(build_dir: Path, stem: str) -> Path:
+    """``<stem>.md`` → ``<stem>.2.md`` → … の未使用パス。"""
+    base = build_dir / f"{stem}.md"
     if not base.exists():
         return base
     n = 2
-    while (build_dir / f"jibun.draft.{n}.md").exists():
+    while (build_dir / f"{stem}.{n}.md").exists():
         n += 1
-    return build_dir / f"jibun.draft.{n}.md"
+    return build_dir / f"{stem}.{n}.md"
 
 
 def _save_final(prompter: Prompter, ws: Workspace, art, draft: str) -> int:
@@ -178,7 +200,7 @@ def _save_final(prompter: Prompter, ws: Workspace, art, draft: str) -> int:
     if target.exists():
         current = target.read_text(encoding="utf-8")
         if current != read_template("jibun.starter.md"):
-            backup = art.build_dir / "jibun.previous.md"
+            backup = _next_backup_path(art.build_dir)
             backup.write_text(current, encoding="utf-8")
             prompter.say(f"既存の jibun.md を退避しました: {backup}")
     target.write_text(draft, encoding="utf-8")

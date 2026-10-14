@@ -127,3 +127,13 @@ def test_cli_app_smoke(tmp_path, monkeypatch):
     rc = cli.main(["app", "--path", str(tmp_path)])
     assert rc == 0
     assert (tmp_path / "jibun.toml").is_file()
+
+
+def test_broken_toml_before_build_returns_to_menu(tmp_path):
+    # Act 3 前の toml 読み込みが壊れていても traceback にせず、案内してメニューへ戻る
+    p = ScriptedPrompter([True, "終了"])
+    assert wizard.run(_args(tmp_path), prompter=p) == 0
+    (tmp_path / "jibun.toml").write_text("[identity\n", encoding="utf-8")
+    p = ScriptedPrompter([True, "ビルド", "終了"])
+    assert wizard.run(_args(tmp_path), prompter=p) == 0
+    assert "直接編集" in p.said()

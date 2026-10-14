@@ -156,3 +156,34 @@ def test_claude_error_retry_then_success(tmp_workspace, monkeypatch):
     assert rc == 0
     assert state["n"] == 2
     assert tmp_workspace.jibun_md.exists()
+
+
+def test_second_save_same_day_keeps_original_backup(tmp_workspace, monkeypatch):
+    # 同日に 2 回保存しても、最初の退避（本人の原本）は上書きされない
+    _seed(tmp_workspace)
+    tmp_workspace.jibun_md.write_text("手書きの原本\n", encoding="utf-8")
+    monkeypatch.setattr(claude_cli, "find_claude", lambda: "/fake/claude")
+    for draft in (DRAFT_V1, DRAFT_V2):
+        monkeypatch.setattr(claude_cli, "run_claude", lambda *a, _d=draft, **k: _d)
+        p = ScriptedPrompter([True, "OK", "OK", "OK", True])
+        assert run_act3(p, JibunConfig(), tmp_workspace) == 0
+    bdir = next(tmp_workspace.build_root.iterdir())
+    assert (bdir / "jibun.previous.md").read_text(encoding="utf-8") == "手書きの原本\n"
+    assert "v1 の観察" in (bdir / "jibun.previous.2.md").read_text(encoding="utf-8")
+    assert "v2 の観察" in tmp_workspace.jibun_md.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("out", ["", "   \n\n", "```markdown\n```\n"])
+def test_empty_claude_output_not_offered_for_save(tmp_workspace, monkeypatch, out):
+    # 空・空白のみ・フェンスだけの出力はドラフトにせず、保存も提案しない
+    _seed(tmp_workspace)
+    tmp_workspace.jibun_md.write_text("既存の内容\n", encoding="utf-8")
+    monkeypatch.setattr(claude_cli, "find_claude", lambda: "/fake/claude")
+    monkeypatch.setattr(claude_cli, "run_claude", lambda *a, **k: out)
+    p = ScriptedPrompter([True])  # egress 同意のみ。以降の質問があれば台本枯渇で失敗
+    rc = run_act3(p, JibunConfig(), tmp_workspace)
+    assert rc == 0
+    assert "出力が空" in p.said()
+    assert tmp_workspace.jibun_md.read_text(encoding="utf-8") == "既存の内容\n"
+    bdir = next(tmp_workspace.build_root.iterdir())
+    assert not (bdir / "jibun.draft.md").exists()
