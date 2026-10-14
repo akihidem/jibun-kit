@@ -64,3 +64,20 @@ def test_write_session_md_writes_and_skips_blank(tmp_path):
     assert "# session x" in text
     assert "- date: 2026-05-11" in text
     assert "hello" in text
+
+
+def test_append_index_dedup_is_whole_line(tmp_workspace):
+    # 既存行の部分文字列になる新しい行も、別の行として追記される
+    common.append_index(tmp_workspace, "gmail", "- 2026-05 / 3 mails / from=sent.mbox.bak")
+    common.append_index(tmp_workspace, "gmail", "- 2026-05 / 3 mails / from=sent.mbox")
+    lines = (tmp_workspace.sources_root / "gmail-index.md").read_text(
+        encoding="utf-8").splitlines()
+    assert "- 2026-05 / 3 mails / from=sent.mbox.bak" in lines
+    assert "- 2026-05 / 3 mails / from=sent.mbox" in lines
+
+
+def test_append_index_trailing_whitespace_counts_as_dup(tmp_workspace):
+    common.append_index(tmp_workspace, "x", "- a")
+    common.append_index(tmp_workspace, "x", "- a  ")
+    idx = (tmp_workspace.sources_root / "x-index.md").read_text(encoding="utf-8")
+    assert idx.splitlines().count("- a") == 1

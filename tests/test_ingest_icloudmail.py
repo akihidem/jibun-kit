@@ -1,4 +1,5 @@
 import argparse
+import shutil
 from pathlib import Path
 
 from jibun_kit.config import JibunConfig
@@ -18,3 +19,15 @@ def test_routes_output_to_icloudmail(tmp_workspace):
     assert not (tmp_workspace.data_root / "gmail").exists()
     idx = (tmp_workspace.sources_root / "icloudmail-index.md").read_text(encoding="utf-8")
     assert "1 mails" in idx
+
+
+def test_mail_app_mbox_directory(tmp_workspace, tmp_path):
+    # Mail.app の書き出しは "Sent Messages.mbox/" dir の中に mbox ファイルを置く
+    d = tmp_path / "Sent Messages.mbox"
+    d.mkdir()
+    shutil.copy(MBOX, d / "mbox")
+    args = argparse.Namespace(mbox=d, operator_email=[], operator_email_pattern=None,
+                              dry_run=False, verbose=False)
+    rc = icloudmail.run(JibunConfig(emails=["operator@example.com"]), args, tmp_workspace)
+    assert rc == 0
+    assert len(list((tmp_workspace.data_root / "icloudmail").rglob("*.md"))) == 1

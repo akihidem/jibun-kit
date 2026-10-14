@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from conftest import ScriptedPrompter
 
 from jibun_kit.app import act_sources
@@ -131,3 +133,47 @@ def test_run_act1_resume_skips_done(tmp_path):
     run_act1(p, ws, done, save=lambda: saves.append(1))
     assert saves == [1]  # 残っていた twitter の 1 回だけ
     assert set(done) == set(ACT1_ORDER)
+
+
+def test_multiline_array_in_toml_tells_manual_edit(tmp_path):
+    # 手書きの複数行 array で set_toml_values が ValueError → traceback にせず案内してスキップ
+    ws = _scaffold(tmp_path)
+    text = ws.config_path.read_text(encoding="utf-8").replace(
+        "emails = []", 'emails = [\n  "old@example.com",\n]')
+    ws.config_path.write_text(text, encoding="utf-8")
+    p = ScriptedPrompter(["取り込む", False, "new@example.com"])  # 設定済みは使わず再入力
+    status = act_sources._propose_source(p, ws, "gmail", load_source("gmail").GUIDE)
+    assert status == "skipped"
+    assert "直接編集" in p.said()
+    assert ws.config_path.read_text(encoding="utf-8") == text  # ファイルは未変更
+
+
+def test_broken_toml_tells_manual_edit(tmp_path):
+    ws = _scaffold(tmp_path)
+    ws.config_path.write_text("[identity\n", encoding="utf-8")
+    p = ScriptedPrompter(["取り込む"])
+    status = act_sources._propose_source(p, ws, "gmail", load_source("gmail").GUIDE)
+    assert status == "failed"
+    assert "直接編集" in p.said()
+
+
+def test_claude_code_projects_root_stored_absolute(tmp_path, monkeypatch):
+    ws = _scaffold(tmp_path / "ws")
+    (tmp_path / "proj").mkdir()
+    monkeypatch.chdir(tmp_path)
+    p = ScriptedPrompter(["取り込む", "proj", False])  # 相対パスで回答、取り込みは断る
+    act_sources._propose_source(p, ws, "claude-code", load_source("claude-code").GUIDE)
+    stored = JibunConfig.load(ws.config_path).claude_projects_root
+    assert stored == str((tmp_path / "proj").resolve())
+
+
+@pytest.mark.parametrize("code, rc", [(None, 0), (0, 0), (3, 3), ("boom", 1)])
+def test_dispatch_ingest_systemexit_codes(tmp_path, monkeypatch, code, rc):
+    from jibun_kit import cli
+
+    def fake_main(argv):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(cli, "main", fake_main)
+    ws = _scaffold(tmp_path)
+    assert _dispatch_ingest(ws, "gmail", [])[0] == rc

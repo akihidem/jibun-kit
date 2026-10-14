@@ -227,6 +227,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")  # 前回 run の古い token を残さない
+            # 他サイトの iframe に埋め込ませない（clickjacking 対策）。inline の
+            # script/style を壊さないよう CSP は frame-ancestors だけにする
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

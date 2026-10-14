@@ -175,7 +175,12 @@ def run(config, args, ws, *, source_name: str = "gmail") -> int:
             file=sys.stderr,
         )
         return 2
-    if not args.mbox.exists():
+    mbox_path = args.mbox
+    # Mail.app の「メールボックスを書き出す」は "Sent Messages.mbox/" という dir を作り、
+    # 中身は dir 内の "mbox" ファイル。dir を渡されたらその中を読む
+    if mbox_path.is_dir():
+        mbox_path = mbox_path / "mbox"
+    if not mbox_path.is_file():
         print(f"error: mbox not found: {args.mbox}", file=sys.stderr)
         return 1
 
@@ -183,7 +188,7 @@ def run(config, args, ws, *, source_name: str = "gmail") -> int:
 
     if args.verbose:
         print(f"  loading {args.mbox}", file=sys.stderr)
-    box = mailbox.mbox(str(args.mbox))
+    box = mailbox.mbox(str(mbox_path), create=False)
     by_month: dict[str, list[tuple[str, str, str]]] = {}
     total_messages = 0
     skipped = 0
@@ -211,26 +216,38 @@ def run(config, args, ws, *, source_name: str = "gmail") -> int:
         return 0
 
     written = 0
+    unchanged = 0
     for ym, items in sorted(by_month.items()):
         items.sort(key=lambda x: x[0])
         for date_iso, subject, body in items:
             slug = slug_subject(subject)
             base = data_dir(ws, source_name, f"{ym}-01") / f"{date_iso[:10]}__{slug}.md"
-            out_path = base
-            counter = 1
-            while out_path.exists():
-                out_path = base.with_suffix(f".{counter}.md")
-                counter += 1
-            out_path.write_text(
+            content = (
                 f"# {subject or '(no subject)'}\n\n"
                 f"- date: {date_iso}\n"
                 f"- subject: {subject}\n"
                 f"- source: {args.mbox}\n\n"
-                f"---\n\n{body}\n",
-                encoding="utf-8",
+                f"---\n\n{body}\n"
             )
+            # 同じ日・同じ件名の別メールは .1.md, .2.md ... に分ける。ただし中身が
+            # 完全に同じファイルが既にあれば同じメールの再取り込みなので書かない
+            # （同じ mbox で再実行するたびに .1.md が増えていくのを防ぐ）。
+            out_path = base
+            counter = 1
+            duplicate = False
+            while out_path.exists():
+                if out_path.read_text(encoding="utf-8") == content:
+                    duplicate = True
+                    break
+                out_path = base.with_suffix(f".{counter}.md")
+                counter += 1
+            if duplicate:
+                unchanged += 1
+                continue
+            out_path.write_text(content, encoding="utf-8")
             written += 1
         append_index(ws, source_name, f"- {ym} / {len(items)} mails / from={args.mbox.name}")
 
-    print(f"done: {written} files written across {len(by_month)} months")
+    print(f"done: {written} files written ({unchanged} already present) "
+          f"across {len(by_month)} months")
     return 0

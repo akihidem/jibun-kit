@@ -168,3 +168,16 @@ def test_resume_reuses_persisted_followups_without_claude(tmp_workspace):
     p = ScriptedPrompter(["深掘り回答"])
     act_interview.run_act2(p, tmp_workspace, progress, _save(tmp_workspace, progress))
     assert [a.id for a in progress.answers] == ["a", "claude-1"]
+
+
+@pytest.mark.parametrize("bad", [
+    {"answers": [{"id": "q1"}]},   # 必須キー欠落
+    {"act": "x"},
+    {"act": None},
+    {"skipped": 3},
+])
+def test_progress_malformed_fields_returns_none(tmp_workspace, bad):
+    p = progress_path(tmp_workspace)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"version": 1, **bad}), encoding="utf-8")
+    assert load_progress(tmp_workspace) is None

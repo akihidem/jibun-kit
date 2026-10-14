@@ -36,31 +36,63 @@ GUIDE = SourceGuide(
     identity_keys=("identity.imessage_label",),
 )
 
-# "May 11, 2026  3:14:09 PM" 形式
-_DATE_RE = re.compile(r"^([A-Z][a-z]+ \d{1,2}, \d{4})\s+(\d{1,2}:\d{2}:\d{2}\s+[AP]M)\s*$")
+# "May 11, 2026  3:14:09 PM" / "Jan 06, 2026  9:29:09 PM" 形式。imessage-exporter は
+# 月を省略形で出し、既読などの注記を同じ行の末尾に "(Read by ...)" で付けることがある
+_DATE_RE = re.compile(
+    r"^([A-Z][a-z]+ \d{1,2}, \d{4})\s+(\d{1,2}:\d{2}:\d{2}\s+[AP]M)(?:\s+\(.*\))?\s*$")
+_DATE_FMTS = ("%b %d, %Y %I:%M:%S %p", "%B %d, %Y %I:%M:%S %p")
 # imessage-exporter が付ける既知のステータス行
 _STATUS_PREFIXES = ("Read by", "Edited", "Replying to", "Reactions:", "Tapbacks:")
 
 
-def parse_imessage_txt(path: Path):
-    """yield (datetime, sender, body)。blank line 区切り。"""
-    text = path.read_text(encoding="utf-8", errors="replace")
-    for chunk in re.split(r"\n\s*\n", text):
-        lines = chunk.splitlines()
-        if len(lines) < 3:
-            continue
-        m = _DATE_RE.match(lines[0].strip())
-        if not m:
-            continue
+def _parse_date_line(line: str) -> "datetime | None":
+    m = _DATE_RE.match(line.strip())
+    if not m:
+        return None
+    stamp = re.sub(r"\s+", " ", f"{m.group(1)} {m.group(2)}")
+    for fmt in _DATE_FMTS:
         try:
-            dt = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%B %d, %Y %I:%M:%S %p")
+            return datetime.strptime(stamp, fmt)
         except ValueError:
             continue
-        sender = lines[1].strip()
-        body_lines = [ln for ln in lines[2:] if not any(ln.startswith(p) for p in _STATUS_PREFIXES)]
+    return None
+
+
+def parse_imessage_txt(path: Path):
+    """yield (datetime, sender, body)。
+
+    日時行で 1 メッセージを区切る。空行で区切ると、本文に空行を含むメッセージの
+    後半が黙って落ちるため（段落を分けた長文が途中で切れる）。
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    current: "tuple[datetime, list[str]] | None" = None
+
+    def flush():
+        if current is None:
+            return None
+        dt, lines = current
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        if len(lines) < 2:
+            return None
+        sender = lines[0].strip()
+        body_lines = [ln for ln in lines[1:]
+                      if not any(ln.startswith(p) for p in _STATUS_PREFIXES)]
         body = "\n".join(body_lines).strip()
-        if body:
-            yield dt, sender, body
+        return (dt, sender, body) if body else None
+
+    for ln in text.splitlines():
+        dt = _parse_date_line(ln)
+        if dt is not None:
+            done = flush()
+            if done:
+                yield done
+            current = (dt, [])
+        elif current is not None:
+            current[1].append(ln)
+    done = flush()
+    if done:
+        yield done
 
 
 def process_file(path: Path, operator_label: str, ws, dry_run: bool, verbose: bool) -> dict:

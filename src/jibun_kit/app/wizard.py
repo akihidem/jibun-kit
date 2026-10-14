@@ -70,7 +70,12 @@ def _run_wizard(prompter: Prompter, cli_path) -> int:
         elif idx == 2:
             progress.act = 3
             save()
-            cfg = JibunConfig.load(ws.config_path)  # Act 1 の toml 更新を反映
+            try:
+                cfg = JibunConfig.load(ws.config_path)  # Act 1 の toml 更新を反映
+            except ValueError as e:  # 手編集で壊れた toml（TOMLDecodeError）
+                prompter.say(f"jibun.toml を読めませんでした（{e}）。"
+                             "jibun.toml を直接編集して直してから、もう一度選んでください。")
+                continue
             act_build.run_act3(prompter, cfg, ws)
         else:
             prompter.say("おつかれさまでした。`jibun app` でいつでも続きができます。")

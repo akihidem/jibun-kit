@@ -14,7 +14,7 @@ import json
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from jibun_kit.common import append_index, data_dir, write_session_md
@@ -92,9 +92,21 @@ def run(config, args, ws) -> int:
     if args.verbose:
         print(f"  loading {tweets_js}", file=sys.stderr)
 
-    raw = load_tweets_js(tweets_js)
+    # 大きいアーカイブは tweets.js と tweets-part1.js, tweets-part2.js ... に分かれる。
+    # 最初の 1 本だけ読むと残りのツイートが黙って落ちるので、同じ dir の分割分も読む
+    parts = [tweets_js] + sorted(
+        (p for p in tweets_js.parent.glob("tweets-part*.js") if p != tweets_js),
+        key=lambda p: (len(p.name), p.name))
+    raw = []
+    for part in parts:
+        if args.verbose and part != tweets_js:
+            print(f"  loading {part}", file=sys.stderr)
+        raw.extend(load_tweets_js(part))
     since_dt = datetime.strptime(args.since, "%Y-%m-%d") if args.since else None
-    until_dt = datetime.strptime(args.until, "%Y-%m-%d") if args.until else None
+    # --until はその日を含める（claude-code の --until と同じ扱い）。日付 0 時で比べると
+    # 指定した日のツイートが全部落ちる
+    until_dt = (datetime.strptime(args.until, "%Y-%m-%d") + timedelta(days=1)
+                if args.until else None)
 
     buckets: dict[str, list[tuple[str, str]]] = defaultdict(list)
     total = 0
@@ -105,7 +117,7 @@ def run(config, args, ws) -> int:
             dt_naive = dt.replace(tzinfo=None)
             if since_dt and dt_naive < since_dt:
                 continue
-            if until_dt and dt_naive > until_dt:
+            if until_dt and dt_naive >= until_dt:
                 continue
             ym, ts_str = dt.strftime("%Y-%m"), dt.isoformat()
         body = f"{text}\n\n<!-- tweet_id: {tid} -->" if tid else text

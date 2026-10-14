@@ -59,19 +59,23 @@ def load_progress(ws: Workspace) -> Progress | None:
     if not isinstance(data, dict) or data.get("version") != VERSION:
         return None
     fields = {f for f in Answer.__dataclass_fields__}
-    answers = [Answer(**{k: v for k, v in a.items() if k in fields})
-               for a in data.get("answers", []) if isinstance(a, dict)]
-    return Progress(
-        version=VERSION,
-        date=data.get("date", ""),
-        act=int(data.get("act", 1)),
-        session_md=data.get("session_md", ""),
-        answers=answers,
-        skipped=list(data.get("skipped", [])),
-        claude_followups=list(data.get("claude_followups", [])),
-        act1_done=list(data.get("act1_done", [])),
-        updated=data.get("updated", ""),
-    )
+    try:
+        answers = [Answer(**{k: v for k, v in a.items() if k in fields})
+                   for a in data.get("answers", []) if isinstance(a, dict)]
+        return Progress(
+            version=VERSION,
+            date=data.get("date", ""),
+            act=int(data.get("act", 1)),
+            session_md=data.get("session_md", ""),
+            answers=answers,
+            skipped=list(data.get("skipped", [])),
+            claude_followups=list(data.get("claude_followups", [])),
+            act1_done=list(data.get("act1_done", [])),
+            updated=data.get("updated", ""),
+        )
+    except (TypeError, ValueError):
+        # 必須キー欠落の answer や "act": "x" / null など、手で壊れた progress は「無い」扱い
+        return None
 
 
 def save_progress(ws: Workspace, progress: Progress, *, now: str) -> None:

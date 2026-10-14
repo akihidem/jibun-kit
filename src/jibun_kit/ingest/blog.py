@@ -68,9 +68,18 @@ def url_to_slug(url: str) -> str:
 
 
 def already_ingested(url: str, index_path: Path) -> bool:
+    """index の ``url=<URL> /`` 欄と完全一致する行があるか。
+
+    部分文字列で見ると ``https://ex.com/post/1`` が ``https://ex.com/post/10`` の
+    取り込み済み行に含まれてしまい、未取得の記事が黙ってスキップされる。
+    """
     if not index_path.exists():
         return False
-    return url in index_path.read_text(encoding="utf-8")
+    for ln in index_path.read_text(encoding="utf-8").splitlines():
+        for field in ln.split(" / "):
+            if field.strip() == f"url={url}":
+                return True
+    return False
 
 
 def add_arguments(parser) -> None:
